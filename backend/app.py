@@ -12,7 +12,7 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-host = 'http://4.145.107.27:80'  # Địa chỉ server trọng tài mặc định
+host = 'http://192.168.2.4:80'  # Địa chỉ server trọng tài mặc định
 team_id = 123  # team_id mặc định
 game_info = {}  # Thông tin trò chơi để hiển thị trên giao diện
 stop_thread = False  # Biến dùng để dừng thread lắng nghe
@@ -39,7 +39,7 @@ class GameClient:
         # và cập nhật thông tin trò chơi
         while not stop_thread:
             # Thời gian lắng nghe giữa các lần
-            time.sleep(3)
+            time.sleep(1)
             print(f'Init: {self.init}')
 
             # Nếu chưa kết nối thì gửi yêu cầu kết nối
@@ -73,7 +73,7 @@ class GameClient:
                     self.size = int(data.get("size"))
                     self.board = copy.deepcopy(data.get("board"))
                     # Lấy nước đi từ AI, nước đi là một tuple (i, j)
-                    move = get_move(self.board, self.size)
+                    move = get_move(self.board, self.size, self.team_roles)
                     print("Move: ", move)
                     # Kiểm tra nước đi hợp lệ
                     valid_move = self.check_valid_move(move)
@@ -164,7 +164,7 @@ def get_data():
 if __name__ == "__main__":
     # Lấy địa chỉ server trọng tài từ người dùng
     # host = input("Enter server url: ")
-    host = "http://4.145.107.27:80"
+    host = "http://192.168.2.4:80"
     room_id = input("Enter room id: ")
     your_team_id = input("Enter your team id: ")
     opponent_team_id = input("Enter opponent team id: ")
