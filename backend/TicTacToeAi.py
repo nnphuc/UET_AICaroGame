@@ -1,9 +1,9 @@
-import copy
-import random
+import sys
 
-
-def get_move(board, size, col):
-    return best_move(board, col)
+def get_move(board, player):
+    if is_empty(board):
+        return int(len(board) / 2), int(len(board[0]) / 2)
+    return best_move(board, player)
 
 def is_empty(board):
     return board == [[' '] * len(board)] * len(board)
@@ -45,7 +45,6 @@ def sum_sumcol_values(sumcol):
     '''
     hợp nhất điểm của mỗi hướng
     '''
-
     for key in sumcol:
         if key == 5:
             sumcol[5] = int(1 in sumcol[5].values())
@@ -80,7 +79,6 @@ def row_to_list(board, y, x, dy, dx, yf, xf):
 def score_of_row(board, cordi, dy, dx, cordf, col):
     '''
     trả về một list với mỗi phần tử đại diện cho số điểm của 5 khối
-
     '''
     colscores = []
     y, x = cordi
@@ -112,10 +110,6 @@ def score_of_col_one(board, col, y, x):
 
 
 def possible_moves(board):
-    '''
-    khởi tạo danh sách tọa độ có thể có tại danh giới các nơi đã đánh phạm vi 3 đơn vị
-    '''
-    # mảng taken lưu giá trị của người chơi và của máy trên bàn cờ
     taken = []
     # mảng directions lưu hướng đi (8 hướng)
     directions = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
@@ -126,9 +120,6 @@ def possible_moves(board):
         for j in range(len(board)):
             if board[i][j] != ' ':
                 taken.append((i, j))
-    ''' duyệt trong hướng đi và mảng giá trị trên bàn cờ của người chơi và máy, kiểm tra nước không thể đi(trùng với 
-    nước đã có trên bàn cờ)
-    '''
     for direction in directions:
         dy, dx = direction
         for coord in taken:
@@ -151,34 +142,27 @@ def TF34score(score3, score4):
                     return True
     return False
 
-def stupid_score(board, col, anticol, y, x):
-    '''
-    cố gắng di chuyển y,x
-    trả về điểm số tượng trưng lợi thế
-    '''
-    global colors
+def stupid_score(board, player, opponent, y, x):
     M = 1000
-    res, adv, dis = 0, 0, 0
+    res, attack_score, defense_score = 0, 0, 0
 
-    # tấn công
-    board[y][x] = col
-    # draw_stone(x,y,colors[col])
-    sumcol = score_of_col_one(board, col, y, x)
-    a = winning_situation(sumcol)
-    adv += a * M
-    sum_sumcol_values(sumcol)
-    # {0: 0, 1: 15, 2: 0, 3: 0, 4: 0, 5: 0, -1: 0}
-    adv += sumcol[-1] + sumcol[1] + 4 * sumcol[2] + 8 * sumcol[3] + 16 * sumcol[4]
+    # Attack score
+    board[y][x] = player
+    sum_player = score_of_col_one(board, player, y, x)
+    a = winning_situation(sum_player)
+    attack_score += a * M
+    sum_sumcol_values(sum_player)
+    attack_score += sum_player[-1] + sum_player[1] + 4 * sum_player[2] + 8 * sum_player[3] + 16 * sum_player[4]
 
-    # phòng thủ
-    board[y][x] = anticol
-    sumanticol = score_of_col_one(board, anticol, y, x)
-    d = winning_situation(sumanticol)
-    dis += d * (M - 100)
-    sum_sumcol_values(sumanticol)
-    dis += sumanticol[-1] + sumanticol[1] + 4 * sumanticol[2] + 8 * sumanticol[3] + 16 * sumanticol[4]
+    # Defense score
+    board[y][x] = opponent
+    sum_opponent = score_of_col_one(board, opponent, y, x)
+    d = winning_situation(sum_opponent)
+    defense_score += d * (M - 100)
+    sum_sumcol_values(sum_opponent)
+    defense_score += sum_opponent[-1] + sum_opponent[1] + 4 * sum_opponent[2] + 8 * sum_opponent[3] + 16 * sum_opponent[4]
 
-    res = adv + dis
+    res = attack_score + defense_score
 
     board[y][x] = ' '
     return res
@@ -204,33 +188,20 @@ def winning_situation(sumcol):
             return 3
     return 0
 
-#minimax
-
-def best_move(board, col):
-    '''
-    trả lại điểm số của mảng trong lợi thế của từng màu
-    '''
-    if col == 'x':
-        anticol = 'o'
+def best_move(board, player):
+    if player == 'x':
+        opponent = 'o'
     else:
-        anticol = 'x'
+        opponent = 'x'
 
-    movecol = (0, 0)
-    maxscorecol = ''
-    # kiểm tra nếu bàn cờ rỗng thì cho vị trí random nếu không thì đưa ra giá trị trên bàn cờ nên đi
-    if is_empty(board):
-        movecol = (int(len(board) / 2), int(len(board[0]) / 2))
-    else:
-        moves = possible_moves(board)
+    predicted_move = (0, 0)
+    max_score = -sys.maxsize
+    moves = possible_moves(board)
 
-        for move in moves:
-            y, x = move
-            if maxscorecol == '':
-                maxscorecol = stupid_score(board, col, anticol, y, x)
-                movecol = move
-            else:
-                scorecol = stupid_score(board, col, anticol, y, x)
-                if scorecol > maxscorecol:
-                    maxscorecol = scorecol
-                    movecol = move
-    return movecol
+    for move in moves:
+        y, x = move
+        temp_score = stupid_score(board, player, opponent, y, x)
+        if temp_score > max_score:
+            max_score = temp_score
+            predicted_move = move
+    return predicted_move
