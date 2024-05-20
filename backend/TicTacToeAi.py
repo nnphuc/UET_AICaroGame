@@ -1,8 +1,8 @@
 import sys
 
+fish_net_positions_taken = False
+
 def get_move(board, player):
-    if is_empty(board):
-        return int(len(board) / 2), int(len(board[0]) / 2)
     return best_move(board, player)
 
 def is_empty(board):
@@ -130,6 +130,45 @@ def possible_moves(board):
                     cord[move] = False
     return cord
 
+def possible_moves_o(board):
+    global fish_net_positions_taken
+    o_taken = []
+    x_taken = []
+    cord = {}
+
+    for i in range(len(board)):
+        for j in range(len(board)):
+            if board[i][j] == 'o':
+                o_taken.append((i, j))
+            if board[i][j] == 'x':
+                x_taken.append((i, j))
+
+    for coord in o_taken:
+        y, x = coord
+        directions = [(1, -2), (-2, -1), (-1, 2), (2, 1),]
+        for dy, dx in directions:
+            move = (y + dy, x + dx)
+            if move[0] >= 0 and move[1] >= 0 and move[0] < len(board) and move[1] < len(board[0]):
+                if move not in o_taken and move not in x_taken and move not in cord:
+                    cord[move] = False
+                elif move in x_taken:
+                    fish_net_positions_taken = True
+    return cord
+
+def is_o_first_moves(board):
+    count_o = 0
+    for y in range(len(board)):
+        for x in range(len(board[0])):
+            if board[y][x] == 'o':
+                count_o += 1
+    return count_o == 0
+
+def play_o_first_move(board):
+    for y in range(len(board)):
+        for x in range(len(board[0])):
+            if board[y][x] == 'x':
+                return (y, x-1)
+
 
 def TF34score(score3, score4):
     '''
@@ -190,13 +229,24 @@ def winning_situation(sumcol):
 
 def best_move(board, player):
     if player == 'x':
+        if is_empty(board):
+            return int(len(board) / 2), int(len(board[0]) / 2)
         opponent = 'o'
     else:
+        if is_o_first_moves(board):
+            return play_o_first_move(board)
         opponent = 'x'
 
     predicted_move = (0, 0)
     max_score = -sys.maxsize
-    moves = possible_moves(board)
+
+    if not fish_net_positions_taken and player == 'o':
+        print("Using fish net positions")
+        moves = possible_moves_o(board)
+        if not moves:
+            moves = possible_moves(board)
+    else:
+        moves = possible_moves(board)
 
     for move in moves:
         y, x = move
@@ -205,3 +255,4 @@ def best_move(board, player):
             max_score = temp_score
             predicted_move = move
     return predicted_move
+
