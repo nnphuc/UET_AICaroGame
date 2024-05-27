@@ -6,6 +6,8 @@ import time
 from Board import BoardGame
 import copy
 import utils
+from threading import Thread
+from typing import List
 
 from logging.config import dictConfig
 
@@ -59,6 +61,82 @@ for i in range(size):
     for j in range(size):
         BOARD[i].append(' ')
 
+MAX_TIME_BY_BOARD_SIZE = {
+    5: 30,
+    6: 200,
+    7: 300,
+    8: 500,
+    9: 600,
+    10: 600,
+    11: 600,
+    12: 600,
+    13: 600,
+    14: 600,
+    15: 600,
+    16: 600,
+    17: 600,
+    18: 600,
+    19: 600,
+    20: 600,
+    21: 600,
+    22: 600,
+    23: 600,
+    24: 600,
+    25: 600,
+    26: 600,
+    27: 600,
+    28: 600,
+    29: 600,
+    30: 600,
+    31: 600,
+    32: 600,
+    33: 600,
+    34: 600,
+    35: 600,
+    36: 600,
+    37: 600,
+    38: 600,
+    39: 600,
+    40: 600,
+}
+
+
+def update_time(rooms: List[BoardGame]):
+    log_time = time.time()
+    while True:
+        time.sleep(0.1)
+        if time.time() - log_time > 5:
+            log_time = time.time()
+            log("total rooms: ", len(rooms))
+        for room_id in rooms:
+            room = rooms[room_id]
+            if room.start_game and room.game_info["status"] == None:
+                team1_id_full = room.game_info["team1_id"]
+                team2_id_full = room.game_info["team2_id"]
+                now = time.time()
+                if room.game_info["turn"] == team1_id_full:
+                    # update time for team1
+                    if room.game_info["time1"] >= MAX_TIME_BY_BOARD_SIZE[room.game_info["size"]]:
+                        room.game_info["status"] = "Team 1 out of time"
+                        room.game_info["score2"] = 1
+                        room.game_info["score1"] = 0
+                        room.game_info["turn"] = room.game_info["team2_id"]
+                    else:
+                        room.game_info["time1"] += now - room.timestamps[0]
+                else:
+                    # update time for team2
+                    if room.game_info["time2"] >= MAX_TIME_BY_BOARD_SIZE[room.game_info["size"]]:
+                        room.game_info["status"] = "Team 2 out of time"
+                        room.game_info["score1"] = 1
+                        room.game_info["score2"] = 0
+                        room.game_info["turn"] = room.game_info["team1_id"]
+                    else:
+                        room.game_info["time2"] += now - room.timestamps[1]
+
+                room.timestamps = [now, now]
+
+thread = Thread(target=update_time, args=(rooms,))
+thread.start()
 
 @app.route('/init', methods=['POST'])
 @cross_origin()
@@ -159,16 +237,17 @@ def handle_move():
     log(f"game info: {board_game.game_info}")
     if data["turn"] == board_game.game_info["turn"] and data["status"] == None:
         board_game.game_info.update(data)
+        now = time.time()
         if data["turn"] == team1_id_full:
-            board_game.game_info["time1"] += time.time() - time_list[0]
+            board_game.game_info["time1"] += now - time_list[0]
             board_game.game_info["turn"] = team2_id_full
-            time_list[1] = time.time()
+            time_list[1] = now
         else:
-            board_game.game_info["time2"] += time.time() - time_list[1]
+            board_game.game_info["time2"] += now - time_list[1]
             board_game.game_info["turn"] = team1_id_full
-            time_list[0] = time.time()
-    log("Team 1 time: ", time_list[0])
-    log("Team 2 time: ", time_list[1])
+            time_list[0] = now
+    log("Team 1 time: ", board_game.game_info["time1"])
+    log("Team 2 time: ", board_game.game_info["time2"])
     if data["status"] == None:
         log("Checking status...")
         board_game.check_status(data["board"])
