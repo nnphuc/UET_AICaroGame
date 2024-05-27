@@ -1,9 +1,22 @@
 import sys
+import copy
+import numpy as np
 
-fish_net_positions_taken = False
+MAX_DEPTH = 3
 
-def get_move(board, player):
-    return best_move(board, player)
+def get_move(board, player, size):
+    board = np.array(board)
+    return alpha_beta(board, player)[0]
+
+def dynamic_depth(depth, board):
+    total_moves = sum(row.count('x') + row.count('o') for row in board)
+    if total_moves < 10:
+        return depth - 2
+    elif total_moves < 20:
+        return depth - 1
+    else:
+        return depth
+
 
 def is_empty(board):
     return board == [[' '] * len(board)] * len(board)
@@ -181,31 +194,44 @@ def TF34score(score3, score4):
                     return True
     return False
 
-def stupid_score(board, player, opponent, y, x):
-    M = 1000
-    res, attack_score, defense_score = 0, 0, 0
+def score_of_col(board, col):
+    '''
+    tính toán điểm số mỗi hướng của column dùng cho is_win;
+    '''
 
-    # Attack score
-    board[y][x] = player
-    sum_player = score_of_col_one(board, player, y, x)
-    a = winning_situation(sum_player)
-    attack_score += a * M
-    sum_sumcol_values(sum_player)
-    attack_score += sum_player[-1] + sum_player[1] + 4 * sum_player[2] + 8 * sum_player[3] + 16 * sum_player[4]
+    f = len(board)
+    # scores của 4 hướng đi
+    scores = {(0, 1): [], (-1, 1): [], (1, 0): [], (1, 1): []}
+    for start in range(len(board)):
+        scores[(1, 0)].extend(score_of_row(board, (0, start), 1, 0, (f - 1, start), col))
+        scores[(0, 1)].extend(score_of_row(board, (start, 0), 0, 1, (start, f - 1), col))
+        scores[(1, 1)].extend(score_of_row(board, (start, 0), 1, 1, (f - 1, f - 1 - start), col))
+        scores[(-1, 1)].extend(score_of_row(board, (start, 0), -1, 1, (0, start), col))
 
-    # Defense score
-    board[y][x] = opponent
-    sum_opponent = score_of_col_one(board, opponent, y, x)
-    d = winning_situation(sum_opponent)
-    defense_score += d * (M - 100)
-    sum_sumcol_values(sum_opponent)
-    defense_score += sum_opponent[-1] + sum_opponent[1] + 4 * sum_opponent[2] + 8 * sum_opponent[3] + 16 * sum_opponent[4]
+        if start + 1 < len(board):
+            scores[(1, 1)].extend(score_of_row(board, (0, start + 1), 1, 1, (f - 2 - start, f - 1), col))
+            scores[(-1, 1)].extend(score_of_row(board, (f - 1, start + 1), -1, 1, (start + 1, f - 1), col))
 
-    res = attack_score + defense_score
+    return score_ready(scores)
 
-    board[y][x] = ' '
-    return res
+def is_win(board):
+    # new_board = self.convert_board(board)
+    new_board = board
+    black = score_of_col(new_board, 'x')
+    white = score_of_col(new_board, 'o')
 
+    sum_sumcol_values(black)
+    sum_sumcol_values(white)
+
+    if 5 in black and black[5] == 1:
+        return 'X won'
+    elif 5 in white and white[5] == 1:
+        return 'O won'
+
+    if sum(black.values()) == black[-1] and sum(white.values()) == white[-1] or possible_moves(board) == []:
+        return 'Draw'
+
+    return 'Continue playing'
 
 def winning_situation(sumcol):
     '''
@@ -227,32 +253,76 @@ def winning_situation(sumcol):
             return 3
     return 0
 
-def best_move(board, player):
+def calculate_score(board, player, opponent, y, x):
+    thread_score = 10000
+    attack_score = calculate_individual_score(board, player, y, x, thread_score)
+    defense_score = calculate_individual_score(board, opponent, y, x, thread_score-500)
+    return attack_score - defense_score
+
+def calculate_individual_score(board, player, y, x, thread_score):
+    board[y][x] = player
+    sum_player = score_of_col_one(board, player, y, x)
+    num_threads = winning_situation(sum_player)
+    score = num_threads * thread_score
+    sum_sumcol_values(sum_player)
+    weights = np.array([5, 11, 24, 49, 100])
+    keys = [-1, 1, 2, 3, 4]
+    values = np.array([sum_player[key] for key in keys])
+    score += np.dot(weights, values)
+    board[y][x] = ' '
+    return score
+
+
+
+def alpha_beta(board, player, alpha=-float('inf'), beta=float('inf'), depth=2, x=0, y=0):
     if player == 'x':
         if is_empty(board):
-            return int(len(board) / 2), int(len(board[0]) / 2)
+            return (len(board) // 2, len(board[0]) // 2), 0
         opponent = 'o'
     else:
         if is_o_first_moves(board):
-            return play_o_first_move(board)
+            return play_o_first_move(board), 0
         opponent = 'x'
 
-    predicted_move = (0, 0)
-    max_score = -sys.maxsize
+    status = is_win(board)
+    if status == "X won":
+        return (y, x), float('inf')
+    elif status == "O won":
+        return (y, x), -float('inf')
+    elif status == "Draw":
+        return (y, x), 0
 
-    if not fish_net_positions_taken and player == 'o':
-        print("Using fish net positions")
-        moves = possible_moves_o(board)
-        if not moves:
-            moves = possible_moves(board)
+    if depth == 0:
+        return (y, x), calculate_score(board, player, opponent, y, x)
+
+    moves = possible_moves(board)
+    if not moves:  # Handle no available moves
+        return (y, x), 0
+
+    best_move = (0, 0)
+    if player == 'x':
+        max_score = -float('inf')
+        for move in moves:
+            temp_board = np.copy(board)
+            temp_board[move[0]][move[1]] = player
+            _, score = alpha_beta(temp_board, opponent, alpha, beta, depth - 1, move[1], move[0])
+            if score > max_score:
+                max_score = score
+                best_move = move
+            alpha = max(alpha, max_score)
+            if alpha >= beta:
+                break
+        return best_move, max_score
     else:
-        moves = possible_moves(board)
-
-    for move in moves:
-        y, x = move
-        temp_score = stupid_score(board, player, opponent, y, x)
-        if temp_score > max_score:
-            max_score = temp_score
-            predicted_move = move
-    return predicted_move
-
+        min_score = float('inf')
+        for move in moves:
+            temp_board = np.copy(board)
+            temp_board[move[0]][move[1]] = player
+            _, score = alpha_beta(temp_board, opponent, alpha, beta, depth - 1, move[1], move[0])
+            if score < min_score:
+                min_score = score
+                best_move = move
+            beta = min(beta, min_score)
+            if alpha >= beta:
+                break
+        return best_move, min_score

@@ -47,7 +47,7 @@ def log(*args):
 PORT = 80
 team1_role = "x"
 team2_role = "o"
-size = 20
+size = 15
 #################
 
 rooms = {}
