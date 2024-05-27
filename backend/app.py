@@ -1,6 +1,8 @@
 import copy
 import json
 import time
+
+import numpy as np
 import requests
 
 from flask import Flask, jsonify, make_response, request
@@ -22,6 +24,8 @@ stop_thread = False  # Biến dùng để dừng thread lắng nghe
 # nghe trọng tài trả về thông tin hiển thị ở '/', gửi yêu cầu khởi tại qua '/init/' và gửi nước đi qua '/move'
 class GameClient:
     def __init__(self, server_url, room_id, your_team_id, opponent_team_id,  your_team_roles):
+
+        self.total_moves = 0
         self.server_url = server_url
         self.team_id = f'{your_team_id}+{your_team_roles}'
         self.your_team_id = your_team_id
@@ -73,7 +77,7 @@ class GameClient:
                     self.size = int(data.get("size"))
                     self.board = copy.deepcopy(data.get("board"))
                     # Lấy nước đi từ AI, nước đi là một tuple (i, j)
-                    move = get_move(self.board, self.team_roles, self.size)
+                    move = get_move(self.board, self.team_roles)
                     print("Move: ", move)
                     # Kiểm tra nước đi hợp lệ
                     valid_move = self.check_valid_move(move)
@@ -81,6 +85,7 @@ class GameClient:
                     if valid_move:
                         self.board[int(move[0])][int(move[1])] = self.team_roles
                         game_info["board"] = self.board
+                        self.total_moves += 2
                         self.send_move()
                     else:
                         print("Invalid move")
