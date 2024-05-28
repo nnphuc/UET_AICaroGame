@@ -236,6 +236,22 @@ def handle_move():
 
     log(f"game info: {board_game.game_info}")
     if data["turn"] == board_game.game_info["turn"] and data["status"] == None:
+        # Kiểm tra nước đi hợp lệ
+        diffs = BoardGame.diff(board_game.game_info["board"], data["board"])
+        if len(diffs) != 1:
+            return {
+                "code": 1,
+                "error": "Invalid move"
+            }
+        i, j = diffs[0]
+        mark = board_game.game_info["turn"][-1]
+        if board_game.game_info["board"][i][j] != " " or data["board"][i][j] != mark:
+            return {
+                "code": 1,
+                "error": "Invalid move"
+            }
+        
+        # Nước đi đã được kiểm tra hợp lệ
         board_game.game_info.update(data)
         now = time.time()
         if data["turn"] == team1_id_full:

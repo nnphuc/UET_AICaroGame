@@ -233,6 +233,19 @@ class BoardGame:
         return new_board
         # self.board = board
         # self.game_info["board"] = self.board
+    
+    @staticmethod
+    def diff(board1, board2) -> list[tuple[int, int]]:
+        """
+        Detects differences between the two boards.
+        Returns the locations (row, column) of ALL different cells detected.
+        """
+        diffs = []
+        for i in range(len(board1)):
+            for j in range(len(board1)):
+                if board1[i][j] != board2[i][j]:
+                    diffs.append((i, j))
+        return diffs
 
 # if __name__=="__main__":
 #     game = BoardGame(5, "123", "234")
