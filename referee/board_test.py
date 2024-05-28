@@ -146,3 +146,47 @@ class BoardTest(unittest.TestCase):
                                  [' ', ' ', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
                                  [' ', 'x', 'x', 'x', 'x'], ])
         self.assertNotEqual("X won", board.is_win(board.board), "test win")
+    
+    def test_diff_same(self):
+        board = BoardGame(size=5,
+                          room_id="room-1",
+                          match_id=1,
+                          board=[[' ', 'x', ' ', ' ', ' '],  [' ', ' ', ' ', ' ', ' '],
+                                 [' ', 'o', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
+                                 [' ', 'o', ' ', ' ', ' '], ])
+        self.assertEqual([], BoardGame.diff(board.board, board.board), "test diff")
+    
+    def test_diff_1(self):
+        board1 = BoardGame(size=5,
+                           room_id="room-1",
+                           match_id=1,
+                           board=[[' ', 'x', ' ', ' ', ' '],  [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], ])
+        board2 = BoardGame(size=5,
+                           room_id="room-1",
+                           match_id=1,
+                           board=[[' ', ' ', ' ', ' ', ' '],  [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], ])
+        self.assertEqual([(0, 1)], BoardGame.diff(board1.board, board2.board), "test diff")
+        self.assertEqual([(0, 1)], BoardGame.diff(board2.board, board1.board), "test diff")
+    
+    def test_diff_multiple(self):
+        board1 = BoardGame(size=5,
+                           room_id="room-1",
+                           match_id=1,
+                           board=[[' ', 'x', 'o', ' ', ' '],  [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], ])
+        board2 = BoardGame(size=5,
+                           room_id="room-1",
+                           match_id=1,
+                           board=[[' ', ' ', ' ', ' ', ' '],  ['o', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], [' ', ' ', ' ', ' ', ' '],
+                                  [' ', ' ', ' ', ' ', ' '], ])
+        self.assertEqual([(0, 1), (0, 2), (1, 0)], BoardGame.diff(board1.board, board2.board), "test diff")
+        self.assertEqual([(0, 1), (0, 2), (1, 0)], BoardGame.diff(board2.board, board1.board), "test diff")
+
+if __name__ == '__main__':
+    unittest.main()
