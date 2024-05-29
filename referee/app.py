@@ -3,11 +3,11 @@ from flask import Flask, request, jsonify, make_response
 # from flask_socketio import SocketIO
 import json
 import time
-from Board import BoardGame
+from Board import BoardGame, realtime
 import copy
 import utils
 from threading import Thread
-from typing import List
+from typing import Any, List
 
 from logging.config import dictConfig
 
@@ -52,7 +52,7 @@ team2_role = "o"
 size = 15
 #################
 
-rooms = {}
+rooms: dict[Any, BoardGame] = {}
 room_by_teams = {}
 
 BOARD = []
@@ -100,20 +100,88 @@ MAX_TIME_BY_BOARD_SIZE = {
     40: 1500  # capped at 1500
 }
 
+def calculate_time_for_team(room: BoardGame, teamNumber: int, now: float):
+    """
+    Calculates time used by a team so far, taking into consideration the time gap between game info fetches.
+    teamNumber == 1 means team1, else team2.
+    now is the current time: now = realtime().
+    """
+    if not room.timeUpdateLock.acquire(False):
+        # Another time manipulation operation for
+        # this room is in progress in another thread.
+        # So let it do its job, we will come back
+        # later. No precision will ever be lost.
+        # print("Time Update Lock not acquired, skipping to the next iteration.")
+        return
+
+    try:
+        lastFetchTime = room.lastFetchTime[teamNumber - 1]
+        lastBoardUpdateTime = room.lastBoardUpdateTime
+        timestamp = room.timestamps[teamNumber - 1]
+        oldTimeUsed = timeUsed = room.game_info["time1"] if teamNumber == 1 else room.game_info["time2"]
+
+        if lastFetchTime < lastBoardUpdateTime:
+            # The last fetch was before the last board update.
+            # We are encountering a time gap between game info
+            # fetches of this team.
+            # Wait for them a little !
+            WAIT_THRESHOLD = lastBoardUpdateTime + 5
+            if now < WAIT_THRESHOLD:
+                # time += 0
+                pass
+            else:
+                if timestamp < WAIT_THRESHOLD:
+                    timeUsed += now - WAIT_THRESHOLD
+                else:
+                    timeUsed += now - timestamp
+        else:
+            timeUsed += now - max(timestamp, lastFetchTime)
+        
+        if timeUsed < 0:
+            # If we use time.time(), which has a precision
+            # of 1 second (!), we may encounter negative
+            # time, i.e. when time.time() from this thread
+            # is 1 second behind the time.time() from another
+            # thread.
+            # Now we're using a monotonic clock for that
+            # (the realtime() function from Board.py),
+            # BUT we still need to check for negative time
+            # and be notified of such incidents.
+            print("ERROR: Time is negative !")
+            print("time:", timeUsed)
+            print("old time:", oldTimeUsed)
+            print("actual now: ", realtime())
+            print("now:", now)
+            print("timestamp:", timestamp)
+            print("lastFetchTime:", lastFetchTime)
+            print("lastBoardUpdateTime:", lastBoardUpdateTime)
+            print("WILL NOT UPDATE TIME NOW.")
+            print("========================")
+            timeUsed = oldTimeUsed
+
+        if teamNumber == 1:
+            room.game_info["time1"] = timeUsed
+        else:
+            room.game_info["time2"] = timeUsed
+
+        room.timestamps[teamNumber - 1] = now
+    
+    finally:
+        room.timeUpdateLock.release()
 
 def update_time(rooms: List[BoardGame]):
-    log_time = time.time()
+    log_time = realtime()
     while True:
         time.sleep(0.1)
-        if time.time() - log_time > 5:
-            log_time = time.time()
+        if realtime() - log_time > 5:
+            log_time = realtime()
             log("total rooms: ", len(rooms))
         for room_id in rooms:
             room = rooms[room_id]
             if room.start_game and room.game_info["status"] == None:
                 team1_id_full = room.game_info["team1_id"]
                 team2_id_full = room.game_info["team2_id"]
-                now = time.time()
+                now = realtime()
                 if room.game_info["turn"] == team1_id_full:
                     # update time for team1
                     if room.game_info["time1"] >= MAX_TIME_BY_BOARD_SIZE[room.game_info["size"]]:
@@ -122,7 +190,7 @@ def update_time(rooms: List[BoardGame]):
                         room.game_info["score1"] = 0
                         room.game_info["turn"] = room.game_info["team2_id"]
                     else:
-                        room.game_info["time1"] += now - room.timestamps[0]
+                        calculate_time_for_team(room, 1, now)
                 else:
                     # update time for team2
                     if room.game_info["time2"] >= MAX_TIME_BY_BOARD_SIZE[room.game_info["size"]]:
@@ -131,14 +199,14 @@ def update_time(rooms: List[BoardGame]):
                         room.game_info["score2"] = 0
                         room.game_info["turn"] = room.game_info["team1_id"]
                     else:
-                        room.game_info["time2"] += now - room.timestamps[1]
-
-                room.timestamps = [now, now]
+                        calculate_time_for_team(room, 2, now)
+                # room.timestamps = [now, now]
+                # this is already done in calculate_time_for_team() calls above.
 
 
 thread = Thread(target=update_time, args=(rooms,))
+thread.daemon = True
 thread.start()
-
 
 @app.route('/init', methods=['POST'])
 @cross_origin()
@@ -185,11 +253,16 @@ def render_board():
     board_game = rooms[room_id]
     team1_id_full = board_game.game_info["team1_id"]
     team2_id_full = board_game.game_info["team2_id"]
-    time_list = board_game.timestamps
 
-    if (info["team_id"] == team1_id_full and not board_game.start_game):
-        time_list[0] = time.time()
-        board_game.start_game = True
+    if info["team_id"] == team1_id_full:
+        with board_game.timeUpdateLock:
+            board_game.lastFetchTime[0] = realtime()
+        if not board_game.start_game:
+            board_game.timestamps[0] = realtime()
+            board_game.start_game = True
+    else:
+        with board_game.timeUpdateLock:
+            board_game.lastFetchTime[1] = realtime()
     # log(f'Board: {board_game.game_info["board"]}')
     response = make_response(jsonify(board_game.game_info))
     return board_game.game_info
@@ -220,6 +293,8 @@ def fe_render_board():
 @app.route('/move', methods=['POST'])
 @cross_origin()
 def handle_move():
+    now = realtime()
+
     log("handle_move")
     data = request.data
 
@@ -234,7 +309,6 @@ def handle_move():
     board_game = rooms[room_id]
     team1_id_full = board_game.game_info["team1_id"]
     team2_id_full = board_game.game_info["team2_id"]
-    time_list = board_game.timestamps
 
     log(f"game info: {board_game.game_info}")
     if data["turn"] == board_game.game_info["turn"] and data["status"] == None:
@@ -255,15 +329,16 @@ def handle_move():
         
         # Nước đi đã được kiểm tra hợp lệ
         board_game.game_info.update(data)
-        now = time.time()
         if data["turn"] == team1_id_full:
-            board_game.game_info["time1"] += now - time_list[0]
+            # Now it's team 2's turn
+            calculate_time_for_team(board_game, 1, now)
             board_game.game_info["turn"] = team2_id_full
-            time_list[1] = now
         else:
-            board_game.game_info["time2"] += now - time_list[1]
+            # Now it's team 1's turn
+            calculate_time_for_team(board_game, 2, now)
             board_game.game_info["turn"] = team1_id_full
-            time_list[0] = now
+        with board_game.timeUpdateLock:
+            board_game.lastBoardUpdateTime = now
     log("Team 1 time: ", board_game.game_info["time1"])
     log("Team 2 time: ", board_game.game_info["time2"])
     if data["status"] == None:
