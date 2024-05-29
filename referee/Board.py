@@ -1,5 +1,17 @@
 import time
 
+from threading import Lock
+
+# Why we need this? Please see the comments
+# in the calculate_time_for_team() function
+# in app.py.
+if time.get_clock_info('perf_counter').monotonic:
+    _realtime_func = time.perf_counter
+else:
+    _realtime_func = time.monotonic # less precise than time.perf_counter
+
+def realtime() -> float:
+    return _realtime_func()
 
 class BoardGame:
     def __init__(self, size, board, room_id, match_id, team1_id="xx1+x", team2_id="xx2+o"):
@@ -24,7 +36,10 @@ class BoardGame:
             "score1": self.score1,
             "score2": self.score2
         }
-        self.timestamps = [time.time()] * 2
+        self.timestamps = [realtime()] * 2
+        self.lastFetchTime: list[float] = [-1.0, -1.0]
+        self.lastBoardUpdateTime = realtime()
+        self.timeUpdateLock = Lock()
         self.start_game = False
 
     def init_board(self):
