@@ -49,7 +49,7 @@ def log(*args):
 PORT = 80
 team1_role = "x"
 team2_role = "o"
-size = 15
+size = 8
 #################
 
 rooms: dict[Any, BoardGame] = {}
