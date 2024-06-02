@@ -321,7 +321,7 @@ def handle_move():
                 }
             
             # Nước đi đã được kiểm tra hợp lệ
-            board_game.game_info.update(data)
+            board_game.game_info["board"] = data["board"]
             if data["turn"] == team1_id_full:
                 # Now it's team 2's turn
                 calculate_time_for_team(board_game, 1, now, useLock=False)
